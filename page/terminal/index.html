@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>AstrBot Web Terminal</title>
+  <!-- 引入 AstrBot 官方 Page Bridge SDK -->
+  <script src="/api/plugin/page/bridge-sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #0d1117;
+      color: #c9d1d9;
+      font-family: "JetBrains Mono", Consolas, Monaco, "Courier New", monospace;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      padding: 12px;
+    }
+
+    /* 顶部信息面板 */
+    .header {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      flex-shrink: 0;
+    }
+    .server-tag {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #58a6ff;
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #2ea043;
+      box-shadow: 0 0 6px #2ea043;
+    }
+
+    /* 救援工具箱快捷按钮 */
+    .toolbox {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+      flex-shrink: 0;
+    }
+    .quick-btn {
+      background: #21262d;
+      color: #8b949e;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    .quick-btn:hover {
+      background: #30363d;
+      color: #f0f6fc;
+      border-color: #8b949e;
+    }
+    .quick-btn.danger {
+      color: #f85149;
+    }
+    .quick-btn.danger:hover {
+      background: #b62324;
+      color: #fff;
+    }
+
+    /* 终端输出屏幕 */
+    #terminal-screen {
+      flex: 1;
+      background: #090d13;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 14px;
+      overflow-y: auto;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .log-entry { margin-bottom: 14px; }
+    .log-cmd-line {
+      color: #79c0ff;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .badge {
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-weight: normal;
+    }
+    .badge.ok { background: #1f6feb; color: #fff; }
+    .badge.err { background: #da3633; color: #fff; }
+    .log-output {
+      color: #e6edf3;
+      background: #161b22;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border-left: 3px solid #30363d;
+    }
+
+    /* 底部命令输入栏 */
+    .input-bar {
+      display: flex;
+      align-items: center;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      margin-top: 10px;
+      padding: 6px 12px;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .prompt-label {
+      color: #58a6ff;
+      font-weight: bold;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    #cmd-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #f0f6fc;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .action-btn {
+      background: #238636;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .action-btn:hover { background: #2ea043; }
+    .action-btn:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+  <!-- 顶部状态栏 -->
+  <div class="header">
+    <div class="server-tag">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="host-info">正在连接服务器环境...</span>
+    </div>
+    <div style="font-size: 12px; color: #8b949e;">
+      目录: <span id="current-dir" style="color: #58a6ff;">/</span>
+    </div>
+  </div>
+
+  <!-- 常用应急救援工具箱 -->
+  <div class="toolbox">
+    <button class="quick-btn" onclick="runQuick('systemctl status sshd || systemctl status ssh')">🔍 查看SSH状态</button>
+    <button class="quick-btn danger" onclick="runQuick('systemctl restart sshd || systemctl restart ssh')">🔄 重启SSH服务</button>
+    <button class="quick-btn" onclick="runQuick('ip -br a || ip a || ifconfig')">🌐 查看IP与网卡</button>
+    <button class="quick-btn" onclick="runQuick('ss -tulpn || netstat -tulpn')">🚪 查看端口监听</button>
+    <button class="quick-btn" onclick="runQuick('ufw status || iptables -L -n -v')">🛡️ 查看防火墙</button>
+    <button class="quick-btn" onclick="runQuick('df -h && free -m')">💾 磁盘与内存</button>
+    <button class="quick-btn" onclick="runQuick('journalctl -u sshd -n 30 || journalctl -u ssh -n 30')">📋 SSH近期报错日志</button>
+    <button class="quick-btn" style="margin-left: auto;" onclick="clearScreen()">🧹 清屏</button>
+  </div>
+
+  <!-- 终端输出区 -->
+  <div id="terminal-screen">
+    <div style="color: #8b949e; margin-bottom: 15px;">
+🚀 AstrBot 网页应急终端已就绪。
+可以在下方输入任意 Shell 命令并回车（支持 sudo、管道、重定向、cd 等）。
+按键盘【↑】【↓】可快速调取历史命令。
+--------------------------------------------------------------------------------
+    </div>
+  </div>
+
+  <!-- 底部输入框 -->
+  <div class="input-bar">
+    <span class="prompt-label" id="prompt-tag">#</span>
+    <input type="text" id="cmd-input" placeholder="输入命令，按 Enter 执行 (例如: systemctl restart sshd)" autofocus autocomplete="off" />
+    <button class="action-btn" id="run-btn" onclick="submitCmd()">执行</button>
+  </div>
+
+  <script>
+    const bridge = window.AstrBotPluginPage;
+    let currentCwd = "";
+    let cmdHistory = [];
+    let historyIdx = -1;
+    let isExecuting = false;
+
+    // 封装与后端的 API 通信 (优先 Bridge，兜底 Fetch)
+    async function callApi(endpoint, method = "GET", payload = null) {
+      if (bridge && typeof bridge.apiPost === "function") {
+        if (method === "POST") return await bridge.apiPost(endpoint, payload || {});
+        return await bridge.apiGet(endpoint, payload || {});
+      }
+      // 备用请求
+      const resp = await fetch(`/web_terminal/${endpoint}`, {
+        method: method,
+        headers: { "Content-Type": "application/json" },
+        body: payload ? JSON.stringify(payload) : null
+      });
+      return await resp.json();
+    }
+
+    // 初始化获取服务器信息
+    async function initInfo() {
+      try {
+        if (bridge && typeof bridge.ready === "function") {
+          await bridge.ready();
+        }
+        const res = await callApi("info", "GET");
+        const data = res.data || res;
+        currentCwd = data.cwd || "/";
+        document.getElementById("host-info").textContent = `${data.user}@${data.hostname} (${data.os})`;
+        document.getElementById("current-dir").textContent = currentCwd;
+        document.getElementById("prompt-tag").textContent = `${data.user}:`;
+        if (data.history) {
+          cmdHistory = data.history.map(h => h.command);
+        }
+      } catch (err) {
+        document.getElementById("host-info").textContent = "无法获取主机信息: " + err.message;
+        document.getElementById("status-dot").style.background = "#da3633";
+      }
+    }
+
+    // 执行命令
+    async function executeCommand(cmd) {
+      if (!cmd || isExecuting) return;
+      isExecuting = true;
+      toggleBtn(true);
+
+      const screen = document.getElementById("terminal-screen");
+      const entry = document.createElement("div");
+      entry.className = "log-entry";
+      entry.innerHTML = `
+        <div class="log-cmd-line">
+          <span>➜ [${new Date().toLocaleTimeString()}]</span>
+          <span>${escapeHtml(cmd)}</span>
+          <span class="badge" style="background: #e3b341;">运行中...</span>
+        </div>
+        <div class="log-output">正在执行...</div>
+      `;
+      screen.appendChild(entry);
+      screen.scrollTop = screen.scrollHeight;
+
+      try {
+        const res = await callApi("exec", "POST", {
+          command: cmd,
+          cwd: currentCwd,
+          timeout: 45
+        });
+
+        const data = res.data || res;
+        if (data.cwd) {
+          currentCwd = data.cwd;
+          document.getElementById("current-dir").textContent = currentCwd;
+        }
+
+        const badgeHtml = data.exit_code === 0 
+          ? `<span class="badge ok">Code: 0 (${data.duration}s)</span>`
+          : `<span class="badge err">Code: ${data.exit_code} (${data.duration}s)</span>`;
+
+        entry.querySelector(".log-cmd-line").innerHTML = `
+          <span>➜ [${new Date().toLocaleTimeString()}]</span>
+          <span>${escapeHtml(cmd)}</span>
+          ${badgeHtml}
+        `;
+        entry.querySelector(".log-output").textContent = data.output || "(命令已完成，无标准输出)";
+
+      } catch (err) {
+        entry.querySelector(".log-cmd-line").innerHTML = `
+          <span>➜ [${new Date().toLocaleTimeString()}]</span>
+          <span>${escapeHtml(cmd)}</span>
+          <span class="badge err">Error</span>
+        `;
+        entry.querySelector(".log-output").textContent = "请求失败: " + err.message;
+      } finally {
+        isExecuting = false;
+        toggleBtn(false);
+        screen.scrollTop = screen.scrollHeight;
+      }
+    }
+
+    function submitCmd() {
+      const input = document.getElementById("cmd-input");
+      const cmd = input.value.trim();
+      if (!cmd) return;
+      cmdHistory.push(cmd);
+      historyIdx = cmdHistory.length;
+      input.value = "";
+      executeCommand(cmd);
+    }
+
+    function runQuick(cmd) {
+      document.getElementById("cmd-input").value = cmd;
+      submitCmd();
+    }
+
+    function clearScreen() {
+      document.getElementById("terminal-screen").innerHTML = "";
+    }
+
+    function toggleBtn(disabled) {
+      document.getElementById("run-btn").disabled = disabled;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // 监听回车与键盘上下键调取历史命令
+    document.getElementById("cmd-input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        submitCmd();
+      } else if (e.key === "ArrowUp") {
+        if (cmdHistory.length > 0 && historyIdx > 0) {
+          historyIdx--;
+          e.target.value = cmdHistory[historyIdx];
+        }
+      } else if (e.key === "ArrowDown") {
+        if (historyIdx < cmdHistory.length - 1) {
+          historyIdx++;
+          e.target.value = cmdHistory[historyIdx];
+        } else {
+          historyIdx = cmdHistory.length;
+          e.target.value = "";
+        }
+      }
+    });
+
+    // 页面加载启动
+    window.addEventListener("DOMContentLoaded", initInfo);
+  </script>
+</body>
+</html>
