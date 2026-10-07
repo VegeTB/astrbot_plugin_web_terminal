@@ -1,0 +1,4 @@
+name: astrbot_plugin_web_terminal
+desc: 专用于服务器应急救援的 WebUI 终端控制台，支持直接在浏览器执行 Shell 命令。
+version: 1.0.0
+author: Admin
