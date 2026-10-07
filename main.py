@@ -68,29 +68,38 @@ class WebTerminalPlugin(Star):
         self._register_web_apis()
 
     def _register_web_apis(self):
-        """核心：将终端执行逻辑注册为 AstrBot WebUI 的内部 API"""
-        if hasattr(self.context, "register_web_api"):
-            self.context.register_web_api(
-                f"/{PLUGIN_NAME}/exec",
-                self.api_exec,
-                ["POST"],
-                "执行终端命令",
-            )
-            self.context.register_web_api(
-                f"/{PLUGIN_NAME}/info",
-                self.api_info,
-                ["GET"],
-                "获取系统与终端状态",
-            )
-            self.context.register_web_api(
-                f"/{PLUGIN_NAME}/kill",
-                self.api_kill,
-                ["POST"],
-                "终止正在运行的命令",
-            )
-            logger.info(f"[{PLUGIN_NAME}] Web 终端接口注册成功：/{PLUGIN_NAME}/*")
-        else:
-            logger.error(f"[{PLUGIN_NAME}] 当前 AstrBot 版本不支持 context.register_web_api")
+        """注册 Web API 路由（同时注册全称和简称，避免前后端前缀不一致报错）"""
+        if not hasattr(self.context, "register_web_api"):
+            logger.error("[WebTerminal] 当前 AstrBot 版本不支持 context.register_web_api")
+            return
+
+        # 兼容两种常见插件名形式
+        plugin_names = ["web_terminal", "astrbot_plugin_web_terminal"]
+
+        for name in plugin_names:
+            try:
+                self.context.register_web_api(
+                    f"/{name}/exec",
+                    self.api_exec,
+                    ["POST"],
+                    "执行终端命令",
+                )
+                self.context.register_web_api(
+                    f"/{name}/info",
+                    self.api_info,
+                    ["GET"],
+                    "获取系统与终端状态",
+                )
+                self.context.register_web_api(
+                    f"/{name}/kill",
+                    self.api_kill,
+                    ["POST"],
+                    "终止正在运行的命令",
+                )
+            except Exception as e:
+                logger.warning(f"[WebTerminal] 注册前缀 /{name} 异常: {e}")
+
+        logger.info("[WebTerminal] Web 终端接口注册完成（已启用双前缀兼容）")
 
     async def api_info(self):
         """返回服务器基础身份与环境信息"""
