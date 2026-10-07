@@ -205,26 +205,25 @@
     let historyIdx = -1;
     let isExecuting = false;
 
-    // 封装与后端的 API 通信 (优先 Bridge，兜底 Fetch)
+    // 封装与后端的 API 通信
     async function callApi(endpoint, method = "GET", payload = null) {
-      if (bridge && typeof bridge.apiPost === "function") {
-        if (method === "POST") return await bridge.apiPost(endpoint, payload || {});
+      // 官方 Page 必须通过 window.AstrBotPluginPage 通信
+      if (window.AstrBotPluginPage) {
+        const bridge = window.AstrBotPluginPage;
+        if (method === "POST") {
+          return await bridge.apiPost(endpoint, payload || {});
+        }
         return await bridge.apiGet(endpoint, payload || {});
       }
-      // 备用请求
-      const resp = await fetch(`/web_terminal/${endpoint}`, {
-        method: method,
-        headers: { "Content-Type": "application/json" },
-        body: payload ? JSON.stringify(payload) : null
-      });
-      return await resp.json();
+      throw new Error("AstrBot 插件 Bridge SDK 尚未就绪，请在 AstrBot WebUI 内部打开此页面");
     }
 
     // 初始化获取服务器信息
     async function initInfo() {
       try {
-        if (bridge && typeof bridge.ready === "function") {
-          await bridge.ready();
+        // 先等待 Bridge 完成握手
+        if (window.AstrBotPluginPage && typeof window.AstrBotPluginPage.ready === "function") {
+          await window.AstrBotPluginPage.ready();
         }
         const res = await callApi("info", "GET");
         const data = res.data || res;
@@ -236,7 +235,7 @@
           cmdHistory = data.history.map(h => h.command);
         }
       } catch (err) {
-        document.getElementById("host-info").textContent = "无法获取主机信息: " + err.message;
+        document.getElementById("host-info").textContent = "连接失败: " + err.message;
         document.getElementById("status-dot").style.background = "#da3633";
       }
     }
